@@ -71,7 +71,30 @@ export default function ClientesPage() {
 
   const eliminar = async (id: number) => {
     if (!confirm('¿Eliminar este cliente?')) return;
-    await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+
+    const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+
+    if (res.status === 409) {
+      const data = await res.json();
+      if (data.tieneTickets) {
+        const confirmar = confirm(
+          `⚠️ ${data.error}\n\nSe eliminarán ${data.cantidadTickets} ticket(s) y todos sus registros asociados.\n\n¿Confirmar eliminación?`
+        );
+        if (!confirmar) return;
+
+        const resForzar = await fetch(`/api/clientes/${id}?forzar=1`, { method: 'DELETE' });
+        if (!resForzar.ok) {
+          const errData = await resForzar.json();
+          alert(`❌ ${errData.error || 'Error al eliminar'}`);
+          return;
+        }
+      }
+    } else if (!res.ok) {
+      const data = await res.json();
+      alert(`❌ ${data.error || 'Error al eliminar el cliente'}`);
+      return;
+    }
+
     cargar(busqueda);
   };
 
@@ -102,37 +125,67 @@ export default function ClientesPage() {
           </div>
 
           {clientes.length > 0 ? (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Cédula</th>
-                  <th>Teléfono</th>
-                  <th>Visitas</th>
-                  <th>Frecuente</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Desktop table */}
+              <table className="data-table desktop-only">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Cédula</th>
+                    <th>Teléfono</th>
+                    <th>Visitas</th>
+                    <th>Frecuente</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientes.map(c => (
+                    <tr key={c.id}>
+                      <td><strong>{c.nombre}</strong></td>
+                      <td>{c.cedula || '—'}</td>
+                      <td>{c.telefono || '—'}</td>
+                      <td>{c.total_visitas}</td>
+                      <td>{c.es_frecuente ? <span className="badge badge-listo">⭐ Sí</span> : '—'}</td>
+                      <td>
+                        <button className="btn btn-secondary btn-sm" onClick={() => abrirEditar(c)} style={{ marginRight: 6 }}>
+                          ✏️
+                        </button>
+                        <button className="btn btn-danger btn-sm" onClick={() => eliminar(c.id)}>
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Mobile cards */}
+              <div className="mobile-cards mobile-only">
                 {clientes.map(c => (
-                  <tr key={c.id}>
-                    <td><strong>{c.nombre}</strong></td>
-                    <td>{c.cedula || '—'}</td>
-                    <td>{c.telefono || '—'}</td>
-                    <td>{c.total_visitas}</td>
-                    <td>{c.es_frecuente ? <span className="badge badge-listo">⭐ Sí</span> : '—'}</td>
-                    <td>
-                      <button className="btn btn-secondary btn-sm" onClick={() => abrirEditar(c)} style={{ marginRight: 6 }}>
-                        ✏️
+                  <div key={c.id} className="client-card">
+                    <div className="client-card-header">
+                      <div>
+                        <strong className="client-card-name">{c.nombre}</strong>
+                        {c.es_frecuente ? <span className="badge badge-listo" style={{ marginLeft: 8, fontSize: '0.7rem' }}>⭐ Frecuente</span> : null}
+                      </div>
+                    </div>
+                    <div className="client-card-details">
+                      {c.cedula && <span>🪪 {c.cedula}</span>}
+                      {c.telefono && <span>📞 {c.telefono}</span>}
+                      <span>📋 {c.total_visitas} visita{c.total_visitas !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="client-card-actions">
+                      <button className="btn btn-secondary btn-sm" onClick={() => abrirEditar(c)}>
+                        ✏️ Editar
                       </button>
                       <button className="btn btn-danger btn-sm" onClick={() => eliminar(c.id)}>
-                        🗑️
+                        🗑️ Eliminar
                       </button>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </>
           ) : (
             <div className="empty-state">
               <div className="icon">👤</div>

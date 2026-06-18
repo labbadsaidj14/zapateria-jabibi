@@ -31,7 +31,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   if (!ticket) return NextResponse.json({ error: 'Ticket no encontrado' }, { status: 404 });
 
-  // Get services
+  // Get articulos
+  const { data: articulos } = await supabase
+    .from('ticket_articulos')
+    .select('*')
+    .eq('ticket_id', ticket.id)
+    .order('id', { ascending: true });
+
+  // Get services (with articulo_id)
   const { data: servicios } = await supabase
     .from('ticket_servicios')
     .select('*')
@@ -50,6 +57,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     materiales: undefined,
   }));
 
+  // Group services by articulo
+  const articulosConServicios = (articulos || []).map(a => ({
+    ...a,
+    servicios: (servicios || []).filter(s => s.articulo_id === a.id),
+  }));
+
+  // Services without articulo (legacy tickets)
+  const serviciosSinArticulo = (servicios || []).filter(s => !s.articulo_id);
+
   // Get config
   const { data: config } = await supabase
     .from('configuracion')
@@ -63,7 +79,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     cliente_cedula: ticket.clientes?.cedula || null,
     cliente_telefono: ticket.clientes?.telefono || null,
     clientes: undefined,
-    servicios: servicios || [],
+    articulos: articulosConServicios,
+    servicios: serviciosSinArticulo,
     materiales,
     config,
   });

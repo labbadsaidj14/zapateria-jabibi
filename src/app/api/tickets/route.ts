@@ -4,11 +4,22 @@ import supabase from '@/lib/db';
 interface TicketServicio {
   descripcion: string;
   precio: number;
+  articulo_index?: number;
 }
 
 interface TicketMaterial {
   material_id: number;
   cantidad: number;
+}
+
+interface TicketArticulo {
+  nivel1_categoria: string;
+  nivel2_tipo: string;
+  nivel3_color: string;
+  nivel4_material: string;
+  nivel5_talla: string;
+  descripcion_trabajo: string;
+  servicios: TicketServicio[];
 }
 
 // GET /api/tickets?q=busqueda&estado=Recibido
@@ -54,8 +65,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const body = await request.json();
 
-  // Generate unique ticket number using RPC or manual increment
-  // First get and increment the counter
+  // Generate unique ticket number using counter
   const { data: counter } = await supabase
     .from('contador_tickets')
     .select('ultimo_numero')
@@ -79,6 +89,16 @@ export async function POST(request: Request) {
   const prefijo = config?.prefijo_ticket || 'JAB-';
   const numero = `${prefijo}${String(nuevoNumero).padStart(5, '0')}`;
 
+  // Build descripcion_zapato and descripcion_trabajo from articulos for backwards compat
+  const articulos: TicketArticulo[] = body.articulos || [];
+  const descripcionZapato = articulos.map((a: TicketArticulo) => 
+    [a.nivel1_categoria, a.nivel2_tipo, a.nivel3_color, a.nivel4_material, a.nivel5_talla]
+      .filter(Boolean).join(' > ')
+  ).join(' | ') || body.descripcion_zapato || '';
+  
+  const descripcionTrabajo = articulos.map((a: TicketArticulo) => a.descripcion_trabajo)
+    .filter(Boolean).join(' | ') || body.descripcion_trabajo || '';
+
   // Insert ticket
   const { data: ticket, error: ticketError } = await supabase
     .from('tickets')
@@ -86,11 +106,13 @@ export async function POST(request: Request) {
       numero,
       cliente_id: body.cliente_id,
       responsable: body.responsable || '',
-      descripcion_zapato: body.descripcion_zapato || '',
-      descripcion_trabajo: body.descripcion_trabajo || '',
+      descripcion_zapato: descripcionZapato,
+      descripcion_trabajo: descripcionTrabajo,
       estado: body.estado || 'Recibido',
+      fecha_ingreso: body.fecha_ingreso || new Date().toISOString(),
       fecha_entrega: body.fecha_entrega || '',
-      descuento: body.descuento || 0,
+      descuento: 0,
+      deposito: body.deposito || 0,
       total: body.total || 0,
       abono_inicial: body.abono_inicial || 0,
       notas: body.notas || '',
@@ -102,18 +124,38 @@ export async function POST(request: Request) {
 
   const ticketId = ticket.id;
 
-  // Insert services
-  if (body.servicios && Array.isArray(body.servicios)) {
-    const serviciosData = (body.servicios as TicketServicio[])
-      .filter(s => s.descripcion)
-      .map(s => ({
-        ticket_id: ticketId,
-        descripcion: s.descripcion,
-        precio: s.precio || 0,
-      }));
+  // Insert articulos and their services
+  if (articulos.length > 0) {
+    for (const articulo of articulos) {
+      const { data: articuloData } = await supabase
+        .from('ticket_articulos')
+        .insert({
+          ticket_id: ticketId,
+          nivel1_categoria: articulo.nivel1_categoria || '',
+          nivel2_tipo: articulo.nivel2_tipo || '',
+          nivel3_color: articulo.nivel3_color || '',
+          nivel4_material: articulo.nivel4_material || '',
+          nivel5_talla: articulo.nivel5_talla || '',
+          descripcion_trabajo: articulo.descripcion_trabajo || '',
+        })
+        .select()
+        .single();
 
-    if (serviciosData.length > 0) {
-      await supabase.from('ticket_servicios').insert(serviciosData);
+      // Insert services for this articulo
+      if (articuloData && articulo.servicios && Array.isArray(articulo.servicios)) {
+        const serviciosData = articulo.servicios
+          .filter((s: TicketServicio) => s.descripcion)
+          .map((s: TicketServicio) => ({
+            ticket_id: ticketId,
+            articulo_id: articuloData.id,
+            descripcion: s.descripcion,
+            precio: s.precio || 0,
+          }));
+
+        if (serviciosData.length > 0) {
+          await supabase.from('ticket_servicios').insert(serviciosData);
+        }
+      }
     }
   }
 

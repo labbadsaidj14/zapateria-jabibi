@@ -43,6 +43,26 @@ export async function GET() {
     clientes: undefined,
   }));
 
+  // Tickets listos para retirar (recordatorios)
+  const { data: ticketsListosData } = await supabase
+    .from('tickets')
+    .select('*, clientes(nombre, telefono, cedula)')
+    .eq('estado', 'Listo')
+    .order('id', { ascending: false });
+
+  const recordatorios = (ticketsListosData || []).map(t => ({
+    id: t.id,
+    numero: t.numero,
+    descripcion_zapato: t.descripcion_zapato,
+    fecha_entrega: t.fecha_entrega,
+    fecha_ingreso: t.fecha_ingreso,
+    total: t.total,
+    deposito: t.deposito || 0,
+    cliente_nombre: t.clientes?.nombre || null,
+    cliente_telefono: t.clientes?.telefono || null,
+    cliente_cedula: t.clientes?.cedula || null,
+  }));
+
   return NextResponse.json({
     totalClientes: totalClientes || 0,
     totalTickets: totalTickets || 0,
@@ -51,5 +71,6 @@ export async function GET() {
     materialesBajos,
     ticketsRecientes: ticketsConCliente,
     alertasStock,
+    recordatorios,
   });
 }

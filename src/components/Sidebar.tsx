@@ -2,18 +2,20 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
 
 const links = [
-  { href: '/', label: 'Panel', icon: '📊' },
-  { href: '/tickets', label: 'Tickets', icon: '🎫' },
-  { href: '/clientes', label: 'Clientes', icon: '👤' },
-  { href: '/inventario', label: 'Inventario', icon: '📦' },
-  { href: '/configuracion', label: 'Configuración', icon: '⚙️' },
+  { href: '/', label: 'Panel', icon: '📊', adminOnly: false },
+  { href: '/tickets', label: 'Tickets', icon: '🎫', adminOnly: false },
+  { href: '/clientes', label: 'Clientes', icon: '👤', adminOnly: false },
+  { href: '/inventario', label: 'Inventario', icon: '📦', adminOnly: false },
+  { href: '/configuracion', label: 'Configuración', icon: '⚙️', adminOnly: true },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const { usuario, logout, isAdmin } = useAuth();
 
   // Close sidebar when route changes on mobile
   useEffect(() => {
@@ -28,6 +30,8 @@ export default function Sidebar() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const filteredLinks = links.filter(l => !l.adminOnly || isAdmin);
 
   return (
     <>
@@ -51,7 +55,7 @@ export default function Sidebar() {
           <p>Sistema Administrativo</p>
         </div>
         <nav className="sidebar-nav">
-          {links.map((link) => (
+          {filteredLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -63,6 +67,19 @@ export default function Sidebar() {
             </Link>
           ))}
         </nav>
+        {usuario && (
+          <div className="sidebar-footer">
+            <div className="sidebar-user">
+              <div className="sidebar-user-info">
+                <span className="sidebar-user-name">{usuario.nombre}</span>
+                <span className="sidebar-user-role">{isAdmin ? '👑 Admin' : '👤 Usuario'}</span>
+              </div>
+              <button className="btn btn-icon btn-sm" onClick={logout} title="Cerrar sesión">
+                🚪
+              </button>
+            </div>
+          </div>
+        )}
       </aside>
     </>
   );
