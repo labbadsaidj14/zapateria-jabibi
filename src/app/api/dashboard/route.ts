@@ -43,25 +43,46 @@ export async function GET() {
     clientes: undefined,
   }));
 
-  // Tickets listos para retirar (recordatorios)
+  // Tickets listos para retirar (recordatorios) — with real abono totals
   const { data: ticketsListosData } = await supabase
     .from('tickets')
     .select('*, clientes(nombre, telefono, cedula)')
     .eq('estado', 'Listo')
     .order('id', { ascending: false });
 
-  const recordatorios = (ticketsListosData || []).map(t => ({
-    id: t.id,
-    numero: t.numero,
-    descripcion_zapato: t.descripcion_zapato,
-    fecha_entrega: t.fecha_entrega,
-    fecha_ingreso: t.fecha_ingreso,
-    total: t.total,
-    deposito: t.deposito || 0,
-    cliente_nombre: t.clientes?.nombre || null,
-    cliente_telefono: t.clientes?.telefono || null,
-    cliente_cedula: t.clientes?.cedula || null,
-  }));
+  // Fetch abonos for all "Listo" tickets in one query
+  const listosIds = (ticketsListosData || []).map(t => t.id);
+  let abonosPorTicket: Record<number, number> = {};
+  if (listosIds.length > 0) {
+    const { data: todosAbonos } = await supabase
+      .from('abonos')
+      .select('ticket_id, monto')
+      .in('ticket_id', listosIds);
+    abonosPorTicket = (todosAbonos || []).reduce((acc, a) => {
+      acc[a.ticket_id] = (acc[a.ticket_id] || 0) + (a.monto || 0);
+      return acc;
+    }, {} as Record<number, number>);
+  }
+
+  const recordatorios = (ticketsListosData || []).map(t => {
+    const abonoInicial = t.abono_inicial || t.deposito || 0;
+    const totalAbonos = abonosPorTicket[t.id] || 0;
+    const totalPagado = abonoInicial + totalAbonos;
+    const saldoRestante = Math.max(0, (t.total || 0) - totalPagado);
+    return {
+      id: t.id,
+      numero: t.numero,
+      descripcion_zapato: t.descripcion_zapato,
+      fecha_entrega: t.fecha_entrega,
+      fecha_ingreso: t.fecha_ingreso,
+      total: t.total,
+      totalPagado,
+      saldoRestante,
+      cliente_nombre: t.clientes?.nombre || null,
+      cliente_telefono: t.clientes?.telefono || null,
+      cliente_cedula: t.clientes?.cedula || null,
+    };
+  });
 
   return NextResponse.json({
     totalClientes: totalClientes || 0,

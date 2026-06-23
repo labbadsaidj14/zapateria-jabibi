@@ -33,7 +33,8 @@ interface DashboardData {
     fecha_entrega: string;
     fecha_ingreso: string;
     total: number;
-    deposito: number;
+    totalPagado: number;
+    saldoRestante: number;
     cliente_nombre: string;
     cliente_telefono: string;
     cliente_cedula: string;
@@ -135,7 +136,11 @@ export default function Dashboard() {
                         </div>
                         <div className="recordatorio-precio">
                           Total: ${r.total.toFixed(2)}
-                          {r.deposito > 0 && <span> · Depósito: ${r.deposito.toFixed(2)} · Saldo: ${(r.total - r.deposito).toFixed(2)}</span>}
+                          {r.totalPagado > 0 && <span> · Pagado: ${r.totalPagado.toFixed(2)}</span>}
+                          {r.saldoRestante > 0
+                            ? <span style={{ color: '#f59e0b', fontWeight: 700 }}> · Debe: ${r.saldoRestante.toFixed(2)}</span>
+                            : <span style={{ color: '#22c55e', fontWeight: 700 }}> · ✅ PAGADO</span>
+                          }
                         </div>
                       </div>
                       <div className="recordatorio-actions">
@@ -146,7 +151,7 @@ export default function Dashboard() {
                             cliente_telefono: r.cliente_telefono,
                             descripcion_zapato: r.descripcion_zapato,
                             total: r.total,
-                            deposito: r.deposito,
+                            deposito: r.totalPagado,
                           })}
                           target="_blank"
                           rel="noopener noreferrer"
