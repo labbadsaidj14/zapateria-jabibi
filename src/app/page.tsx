@@ -151,7 +151,8 @@ export default function Dashboard() {
                             cliente_telefono: r.cliente_telefono,
                             descripcion_zapato: r.descripcion_zapato,
                             total: r.total,
-                            deposito: r.totalPagado,
+                            totalPagado: r.totalPagado,
+                            saldoRestante: r.saldoRestante,
                           })}
                           target="_blank"
                           rel="noopener noreferrer"

@@ -65,25 +65,46 @@ export function generarRecordatorioWhatsApp(ticket: {
   cliente_telefono?: string;
   descripcion_zapato: string;
   total: number;
+  totalPagado?: number;
+  saldoRestante?: number;
   deposito?: number;
 }): string {
-  const saldoRestante = ticket.total - (ticket.deposito || 0);
-  
-  const mensaje = `¡Hola ${ticket.cliente_nombre}! 👋
+  // Support both new fields and legacy `deposito`
+  const totalPagado = ticket.totalPagado ?? ticket.deposito ?? 0;
+  const saldoRestante = ticket.saldoRestante ?? Math.max(0, ticket.total - totalPagado);
+  const estaPagado = saldoRestante <= 0 && ticket.total > 0;
+
+  let mensaje = `¡Hola ${ticket.cliente_nombre}! 👋
 
 Le informamos desde *ZAPATERÍA JABIBI* que su trabajo ya está *LISTO* para retirar ✅
 
 📋 *Ticket:* ${ticket.numero}
 👟 *Producto:* ${ticket.descripcion_zapato}
-💰 *Total:* $${ticket.total.toFixed(2)}${saldoRestante > 0 && saldoRestante < ticket.total ? `\n💳 *Saldo pendiente:* $${saldoRestante.toFixed(2)}` : ''}
+
+━━━━━━━━━━━━━━━━━━
+💰 *RESUMEN DE PAGO*
+━━━━━━━━━━━━━━━━━━
+💵 *Total:* $${ticket.total.toFixed(2)}`;
+
+  if (totalPagado > 0) {
+    mensaje += `\n✅ *Pagado:* $${totalPagado.toFixed(2)}`;
+  }
+
+  if (estaPagado) {
+    mensaje += `\n🟢 *Estado:* ¡PAGADO! ✅`;
+  } else if (saldoRestante > 0) {
+    mensaje += `\n💳 *Saldo a cancelar:* $${saldoRestante.toFixed(2)}`;
+  }
+
+  mensaje += `
 
 📍 Estamos en Caracas, Parque Carabobo
 ⏰ Le esperamos en nuestro horario habitual
 
 _¡Gracias por confiar en nosotros!_ ✨`;
 
-  const phone = ticket.cliente_telefono?.replace(/[^0-9]/g, '') || '';
-  const phoneParam = phone ? phone : '';
-  
+  // Use proper Venezuelan phone formatting (04XX → 584XX)
+  const phoneParam = formatearTelefonoWhatsApp(ticket.cliente_telefono || '');
+
   return `https://wa.me/${phoneParam}?text=${encodeURIComponent(mensaje)}`;
 }
