@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
+import { descargarVCard } from '@/lib/vcard';
 
 interface Cliente {
   id: number;

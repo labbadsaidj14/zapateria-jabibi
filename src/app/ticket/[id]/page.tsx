@@ -60,6 +60,21 @@ export default function TicketViewPage() {
   const [abonosData, setAbonosData] = useState<AbonosData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Payment form state
+  const [showPagoForm, setShowPagoForm] = useState(false);
+  const [pagoMonto, setPagoMonto] = useState('');
+  const [pagoNota, setPagoNota] = useState('');
+  const [pagoLoading, setPagoLoading] = useState(false);
+  const [pagoError, setPagoError] = useState('');
+  const [pagoExito, setPagoExito] = useState('');
+
+  const cargarAbonos = (ticketId: number) => {
+    fetch(`/api/abonos/${ticketId}`)
+      .then(r => r.json())
+      .then(setAbonosData)
+      .catch(() => {});
+  };
+
   useEffect(() => {
     fetch(`/api/tickets/${params.id}`)
       .then(r => r.json())
@@ -68,15 +83,50 @@ export default function TicketViewPage() {
           setTicket(null);
         } else {
           setTicket(data);
-          // Fetch abonos data
-          fetch(`/api/abonos/${data.id}`)
-            .then(r => r.json())
-            .then(setAbonosData)
-            .catch(() => {});
+          cargarAbonos(data.id);
         }
         setLoading(false);
       });
   }, [params.id]);
+
+  const registrarAbono = async () => {
+    if (!ticket) return;
+    const monto = parseFloat(pagoMonto);
+    if (!monto || monto <= 0) {
+      setPagoError('Ingresa un monto válido mayor a 0');
+      return;
+    }
+
+    setPagoLoading(true);
+    setPagoError('');
+    setPagoExito('');
+
+    try {
+      const res = await fetch(`/api/abonos/${ticket.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monto, nota: pagoNota.trim() }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setPagoError(err.error || 'Error al registrar el pago');
+        return;
+      }
+
+      const data = await res.json();
+      setAbonosData(data);
+      setPagoMonto('');
+      setPagoNota('');
+      setShowPagoForm(false);
+      setPagoExito('✅ Pago registrado correctamente');
+      setTimeout(() => setPagoExito(''), 5000);
+    } catch {
+      setPagoError('Error de conexión al registrar el pago');
+    } finally {
+      setPagoLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -108,6 +158,7 @@ export default function TicketViewPage() {
   const whatsappLink = generarMensajeWhatsApp({
     numero: ticket.numero,
     cliente_nombre: ticket.cliente_nombre,
+    cliente_telefono: ticket.cliente_telefono,
     descripcion_zapato: ticket.descripcion_zapato,
     descripcion_trabajo: ticket.descripcion_trabajo,
     estado: ticket.estado,
@@ -135,6 +186,7 @@ export default function TicketViewPage() {
   return (
     <div className="ticket-view">
       <div className="ticket-card">
+
         {/* HEADER */}
         <div className="ticket-brand">
           <h1>{ticket.config?.nombre_negocio || 'ZAPATERÍA JABIBI'}</h1>
@@ -186,7 +238,6 @@ export default function TicketViewPage() {
           </>
         ) : (
           <>
-            {/* Legacy: single product format */}
             <div className="ticket-section-title">Información del Producto</div>
             <div className="ticket-detail">
               <span className="label">Producto</span>
@@ -199,7 +250,7 @@ export default function TicketViewPage() {
           </>
         )}
 
-        {/* LEGACY SERVICES (without articulo) */}
+        {/* LEGACY SERVICES */}
         {ticket.servicios?.length > 0 && (
           <>
             <div className="ticket-section-title">Servicios</div>
@@ -239,31 +290,26 @@ export default function TicketViewPage() {
           <span className="label">Estado</span>
           <span className="value" style={{
             color: ticket.estado === 'Listo' ? '#22c55e' : ticket.estado === 'Entregado' ? '#888' : '#D97706',
-            fontWeight: 700
+            fontWeight: 700,
           }}>
             {ticket.estado}
           </span>
         </div>
 
-        {/* ═══════ SECCIÓN DE PAGO ═══════ */}
+        {/* ═══ RESUMEN DE PAGO ═══ */}
         <div className="ticket-section-title">💰 Resumen de Pago</div>
 
-        {/* TOTAL */}
         <div className="ticket-total">
           Total: ${totalTicket.toFixed(2)}
         </div>
 
-        {/* ABONADO */}
         {totalAbonado > 0 && (
           <div className="ticket-detail" style={{ color: '#22c55e' }}>
             <span className="label">✅ Abonado</span>
-            <span className="value" style={{ fontWeight: 700 }}>
-              ${totalAbonado.toFixed(2)}
-            </span>
+            <span className="value" style={{ fontWeight: 700 }}>${totalAbonado.toFixed(2)}</span>
           </div>
         )}
 
-        {/* Detalle: Abono inicial / depósito */}
         {abonoInicial > 0 && (
           <div className="ticket-detail" style={{ fontSize: '0.82rem', color: '#888' }}>
             <span className="label" style={{ paddingLeft: 12 }}>↳ Depósito inicial</span>
@@ -271,7 +317,6 @@ export default function TicketViewPage() {
           </div>
         )}
 
-        {/* Detalle: Cada abono individual */}
         {abonosData?.abonos && abonosData.abonos.length > 0 && abonosData.abonos.map((abono, i) => (
           <div className="ticket-detail" key={abono.id || i} style={{ fontSize: '0.82rem', color: '#888' }}>
             <span className="label" style={{ paddingLeft: 12 }}>
@@ -281,7 +326,7 @@ export default function TicketViewPage() {
           </div>
         ))}
 
-        {/* RESTANTE o PAGADO */}
+        {/* ESTADO: PAGADO o RESTANTE */}
         {estaPagado ? (
           <div className="ticket-detail" style={{ marginTop: 8 }}>
             <span className="label"><strong>Estado de Pago</strong></span>
@@ -299,15 +344,146 @@ export default function TicketViewPage() {
         ) : (
           <div className="ticket-detail" style={{
             marginTop: 8,
-            background: 'rgba(217, 119, 6, 0.08)',
+            background: 'rgba(217,119,6,0.08)',
             padding: '10px 14px',
             borderRadius: 8,
-            border: '1px solid rgba(217, 119, 6, 0.2)',
+            border: '1px solid rgba(217,119,6,0.2)',
           }}>
             <span className="label" style={{ color: '#D97706' }}><strong>💳 Resta por pagar</strong></span>
             <span className="value" style={{ fontWeight: 800, color: '#D97706', fontSize: '1.1rem' }}>
               ${restante.toFixed(2)}
             </span>
+          </div>
+        )}
+
+        {/* ═══ REGISTRAR PAGO ═══ */}
+        {!estaPagado && (
+          <div style={{ marginTop: 16 }}>
+            {pagoExito && (
+              <div style={{
+                background: 'rgba(34,197,94,0.12)',
+                border: '1px solid rgba(34,197,94,0.35)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                color: '#16a34a',
+                fontSize: '0.9rem',
+                marginBottom: 10,
+                fontWeight: 600,
+              }}>
+                {pagoExito}
+              </div>
+            )}
+
+            {!showPagoForm ? (
+              <button
+                className="btn btn-success"
+                style={{ width: '100%', fontSize: '1rem', padding: '12px' }}
+                onClick={() => { setShowPagoForm(true); setPagoError(''); }}
+              >
+                💵 Registrar Pago
+              </button>
+            ) : (
+              <div style={{
+                border: '2px solid #22c55e',
+                borderRadius: 12,
+                padding: 16,
+                background: 'rgba(34,197,94,0.04)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <strong style={{ fontSize: '1rem' }}>💵 Registrar Pago</strong>
+                  <button
+                    className="btn btn-icon"
+                    onClick={() => { setShowPagoForm(false); setPagoError(''); setPagoMonto(''); setPagoNota(''); }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {pagoError && (
+                  <div style={{
+                    background: 'rgba(239,68,68,0.1)',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    color: '#dc2626',
+                    fontSize: '0.85rem',
+                    marginBottom: 12,
+                  }}>
+                    ❌ {pagoError}
+                  </div>
+                )}
+
+                <div className="form-group" style={{ marginBottom: 10 }}>
+                  <label className="form-label">
+                    Monto ($)
+                    {restante > 0 && (
+                      <span
+                        style={{ marginLeft: 8, color: '#22c55e', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600 }}
+                        onClick={() => setPagoMonto(restante.toFixed(2))}
+                      >
+                        → Pagar todo (${restante.toFixed(2)})
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    placeholder={`Máx. $${restante.toFixed(2)}`}
+                    value={pagoMonto}
+                    onChange={e => setPagoMonto(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label">Nota (opcional)</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="Ej: Efectivo, transferencia Bs, Zelle..."
+                    value={pagoNota}
+                    onChange={e => setPagoNota(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && registrarAbono()}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="btn btn-success"
+                    style={{ flex: 1 }}
+                    onClick={registrarAbono}
+                    disabled={pagoLoading}
+                  >
+                    {pagoLoading ? 'Guardando...' : '✅ Confirmar Pago'}
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => { setShowPagoForm(false); setPagoError(''); setPagoMonto(''); setPagoNota(''); }}
+                    disabled={pagoLoading}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Mensaje éxito cuando ya está pagado */}
+        {estaPagado && pagoExito && (
+          <div style={{
+            background: 'rgba(34,197,94,0.12)',
+            border: '1px solid rgba(34,197,94,0.35)',
+            borderRadius: 8,
+            padding: '10px 14px',
+            color: '#16a34a',
+            fontSize: '0.9rem',
+            marginTop: 10,
+            fontWeight: 600,
+          }}>
+            {pagoExito}
           </div>
         )}
 
@@ -325,7 +501,7 @@ export default function TicketViewPage() {
         </div>
       </div>
 
-      {/* ACTIONS */}
+      {/* ACCIONES */}
       <div className="ticket-actions">
         <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
           📱 Enviar por WhatsApp
@@ -340,4 +516,3 @@ export default function TicketViewPage() {
     </div>
   );
 }
-

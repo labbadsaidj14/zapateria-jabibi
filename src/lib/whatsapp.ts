@@ -1,6 +1,9 @@
+import { formatearTelefonoWhatsApp } from './vcard';
+
 export function generarMensajeWhatsApp(ticket: {
   numero: string;
   cliente_nombre: string;
+  cliente_telefono?: string;
   descripcion_zapato: string;
   descripcion_trabajo: string;
   estado: string;
@@ -50,7 +53,9 @@ export function generarMensajeWhatsApp(ticket: {
 
 _Gracias por confiar en nosotros_ ✨`;
 
-  return `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+  const phoneParam = formatearTelefonoWhatsApp(ticket.cliente_telefono || '');
+
+  return `https://wa.me/${phoneParam}?text=${encodeURIComponent(mensaje)}`;
 }
 
 
